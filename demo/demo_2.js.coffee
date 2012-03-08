@@ -18,9 +18,7 @@ class Channel
 # Store and manage the accumulated tags
 
 class TagAcumulator
-  constructor: (ch) ->
-    # FACTORIZE: selector, hooks?
-    # REVIEW: (*) classes, (*) don't allow duplication
+  constructor: (ch, options={}) ->
     @channel = ch
     # input
     @channel.subscribe 'accumulator:store', @store, @
@@ -28,14 +26,16 @@ class TagAcumulator
     # state
     @stored_tags = []
     # initialize
+    @render = options.tag_render if options.tag_render?
     @dom = @initialize_dom()
     @bind_events(@dom)
 
   # Operations
 
   store: (tag) ->
-    @stored_tags.push tag
-    @dom.tag_list.find('li:last').before @render(tag)
+    unless tag in @stored_tags
+      @stored_tags.push tag
+      @dom.tag_list.find('li:last').before @render(tag)
 
   delete_last: ->
     deleted = @stored_tags.pop()
@@ -62,8 +62,7 @@ class TagAcumulator
 # Show and manage the suggestion box
 
 class TagSuggestion
-  constructor: (ch) ->
-    # FACTORIZE: selector, available options (as a method?), delay and throttle of the suggestion, rendering, hooks?
+  constructor: (ch, options={}) ->
     # REVIEW: classes
     @channel = ch
     # input
@@ -73,15 +72,22 @@ class TagSuggestion
     @channel.subscribe 'suggest:prev',   @go_prev, @
     @channel.subscribe 'suggest:select', @select,  @
     # state
-    @input                  = null
-    @selected_index         = 0
-    @available_values       = ["hola", "hello", "ahoy!", "bonjorno", "halo", "buenas", "akandemorl", "jarl"]
-    @options_list           = []
+    @input          = ""
+    @selected_index = 0
+    @options_list   = []
+    # customizations
+    @get_suggestions  = options.get_suggestions if options.get_suggestions?
+    @available_values = options.suggestions || []
+    @render           = options.suggest_render if options.suggest_render?
     #init
     @dom = @initialize_dom()
     @bind_events(@dom)
 
   # Operations
+
+  get_suggestions: (input, cb) ->
+    list = _.filter @available_values, (w) -> w.match(input)
+    cb(list)
 
   go_next: ->
     @selected_index = Math.min(@options_list.length - 1, @selected_index + 1)
@@ -100,7 +106,7 @@ class TagSuggestion
   # DOM
 
   initialize_dom: ->
-    suggestion_box: $('#demo2-suggestion-box')
+    suggestion_box: $('.e-tgwd-suggest-box')
 
   bind_events: (dom) ->
     self = @
@@ -111,47 +117,60 @@ class TagSuggestion
   show: (input) ->
     # Don't do anything if the input is the same
     return unless @input != input
-    return @dom.suggestion_box.slideUp() if input.length == 0
+    return @dom.suggestion_box.slideUp() if $.trim(input).length == 0
     self = @
     @input = input
-    @options_list = _.filter @available_values, (w) -> w.match(input)
-    if @options_list.length > 0
-      @dom.suggestion_box.html('')
-      _.each @options_list, (s) -> self.dom.suggestion_box.append(self.render(s))
-      @dom.suggestion_box.slideDown()
-      @selected_index = -1
-    else
-      @dom.suggestion_box.slideUp()
+    @get_suggestions input, (options_list) ->
+      self.options_list = options_list
+      if options_list.length > 0
+        self.dom.suggestion_box.html('')
+        _.each options_list, (s) -> self.dom.suggestion_box.append(self.render(s))
+        self.dom.suggestion_box.slideDown()
+        self.selected_index = -1
+      else
+        self.dom.suggestion_box.slideUp()
 
   render: (s) ->
     $('<li/>').addClass('e-suggestion').attr('data-suggestion', s).text(s)
 
   close: ->
+    @input = ""
     @dom.suggestion_box.hide()
 
   highlight_element: (n) ->
     n ||= @selected_index
-    @dom.suggestion_box.find('li').css('color', '')
-    @dom.suggestion_box.find("li:nth-child(#{n+1})").css('color', 'red')
+    @dom.suggestion_box.find('li').removeClass('highlighted')
+    @dom.suggestion_box.find("li:nth-child(#{n+1})").addClass('highlighted')
 
 # Input Dispatcher
 
 class TagInput
   # FACTORIZE: Selectors
-  constructor: (ch) ->
+  constructor: (ch, options) ->
     @channel = ch
     #input
     @channel.subscribe 'input:clear', (-> @dom.input.val('')), @
+    # customization
+    @suggest = _.debounce @_suggest, (options.debounce || 300)
     # init
     @dom = @initialize_dom()
     @bind_events(@dom)
 
   initialize_dom: ->
-      input: $('.e-tgwd-input')
+    input: $('.e-tgwd-input')
+
+  _suggest: (value) ->
+    @channel.publish('suggest:show', value)
 
   bind_events: (dom) ->
     # Dispatch events based on keypresses
     self = @
+
+    dom.input.keydown (e) ->
+      value = self.dom.input.val()
+      switch e.keyCode
+        when 8      then self.channel.publish('accumulator:delete-last') if value.length == 0
+
     dom.input.keyup (e) ->
       value = self.dom.input.val()
       switch e.keyCode
@@ -159,8 +178,7 @@ class TagInput
         when 38     then self.channel.publish('suggest:prev')
         when 32,188 then self.channel.publish('input:tag', value)
         when 13     then self.channel.publish('suggest:select')
-        when 8      then self.channel.publish('accumulator:delete-last') if value.length == 0
-      self.channel.publish('suggest:show', value)
+        else self.suggest(value)
 
     dom.input.blur ->
       value = self.dom.input.val()
@@ -169,15 +187,14 @@ class TagInput
 # Parent Widget
 
 class TagWidget
-  # 1) SET THE PARAMETERS
-  # 2) DO THE DOM MANIPULATION AROUND THE INPUT
-  constructor: (input: input)->
+  constructor: (options={}) ->
+    throw new Error('Please give me an input!') unless (input = options.input)
     @wrap_input(input)
     # the decoupled components
     @channel     = new Channel()
-    @input       = new TagInput(@channel)
-    @accumulator = new TagAcumulator(@channel)
-    @suggest     = new TagSuggestion(@channel)
+    @input       = new TagInput(@channel, options)
+    @accumulator = new TagAcumulator(@channel, options)
+    @suggest     = new TagSuggestion(@channel, options)
     # input
     @channel.subscribe 'suggest:selected', @read_tag, @
     @channel.subscribe 'input:tag',        @read_tag, @
@@ -193,15 +210,19 @@ class TagWidget
     @read_input(suggestion)
 
   get_tags: ->
+    @accumulator.stored_tags
 
   # DOM
 
   wrap_input: (selector) ->
-    input =    $(selector).addClass('e-tgwd-input')
-    store =    $('<ul/>').addClass ('e-tgwd-list-store')
-    input_li = $('<li/>').addClass ('e-tgwd-input-li')
-    input.wrap(store).wrap(input_li)
-
+    # Nasty...
+    input        = $(selector).addClass('e-tgwd-input')
+    surround_box = $('<div/>').addClass('e-tgwd-box')
+    store        = $('<ul/>').addClass ('e-tgwd-list-store')
+    input_li     = $('<li/>').addClass ('e-tgwd-input-li')
+    suggest_box  = $('<ul/>').addClass ('e-tgwd-suggest-box')
+    input.wrap(surround_box).wrap(store).wrap(input_li)
+    $('.e-tgwd-box').append(suggest_box)
 
 
 ### HIPOTHETIC USE CASE
@@ -209,7 +230,9 @@ class TagWidget
 
 $ ->
   sugs = ['a']
-  tw = new TagWidget input: '#demo2-input', options: (-> sugs), throttle: 0
+  window.tw = new TagWidget
+    input: '#demo2-input',
+    suggestions: ['hey!', 'hello', 'aloha', 'bonjorno', 'hola!']
   # OR maybe better as a jQuery plugin?
   # $('#input-selector').tabWidget({options: (-> sugs), throttle: 0})
 
