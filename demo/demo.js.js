@@ -1,12 +1,12 @@
 (function() {
-  var sm, widget_state;
+  var widget_state;
   widget_state = {
     current_input: "",
     suggestion_list: [],
     selected_suggestion: 0,
     added_items: []
   };
-  sm = new W.SimpleStateMachine({
+  window.sm = new W.SimpleStateMachine({
     "delete": ['empty'],
     empty: ['writing', 'delete'],
     writing: ['writing', 'empty', 'suggest', 'navigation', 'add'],
@@ -42,99 +42,73 @@
     "delete": function() {
       var d;
       d = this.added_items.pop();
-      console.log("Deleting " + d + "...");
+      sm.dom.manipulation.remove_last_item();
       return this.sm.go.empty();
     },
-    empty: function() {
+    empty: function(e) {
       sm.dom.input.val('');
-      this.current_input = '';
-      return console.log('empty I am!');
+      sm.dom.manipulation.hide_suggestion_box();
+      return this.current_input = '';
     },
     writing: function(e, text) {
+      var matching_suggestions;
       if (text === "") {
         return this.sm.go.empty();
       }
-      console.log("writing: " + text);
-      return this.current_input = text;
+      if ((text != null) && this.current_input !== text) {
+        this.current_input = text;
+        matching_suggestions = _.filter(this.suggestion_list, function(s) {
+          return s.match(text);
+        });
+        return this.sm.go.suggest(matching_suggestions);
+      }
     },
-    suggest: function() {
-      console.log("suggesting on: " + text);
+    suggest: function(suggestions) {
+      if (suggestions.length > 0) {
+        this.active_suggestions = suggestions;
+        sm.dom.manipulation.show_suggestion_box(suggestions);
+      } else {
+        sm.dom.manipulation.hide_suggestion_box();
+        this.active_suggestions = [];
+      }
       return this.sm.go.writing();
     },
-    add: function() {
-      var item;
-      if ((item = this.current_input) && item !== "") {
+    add: function(item) {
+      if ((item || (item = this.current_input)) && item !== "") {
         this.added_items.push(item);
-        console.log("NEW ITEM [" + this.current_input + "]");
-        console.log("  - item list: " + this.added_items);
+        sm.dom.manipulation.add_item(item);
       }
       return this.sm.go.empty();
     },
     navigation: function() {
+      if (this.active_suggestions.length === 0) {
+        this.sm.go.writing();
+      }
       if (this.selected_suggestion < 0) {
-        console.log('Quit navigation');
         this.selected_suggestion = 0;
+        sm.dom.manipulation.hide_suggestion_box();
         this.sm.send('exit');
       }
-      console.log("Enterin navigation state");
-      return console.log("  - current selection: " + this.selected_suggestion);
+      return sm.dom.manipulation.highlight_suggestion(this.selected_suggestion + 1);
     },
     up: function() {
-      console.log("Going up in navigation!");
       this.selected_suggestion -= 1;
       return this.sm.go.navigation();
     },
     down: function() {
-      console.log("Going down in navigation!");
       this.selected_suggestion += 1;
       return this.sm.go.navigation();
     },
-    select: function() {
-      console.log("item selected: " + this.selected_suggestion);
-      this.current_input = this.suggestion_list[this.selected_suggestion];
-      return this.sm.go.add();
+    select: function(item) {
+      console.log("select: " + item);
+      item || (item = this.active_suggestions[this.selected_suggestion]);
+      return this.sm.go.add(item);
     }
   };
   sm.actions = {
     remove_item: function(text) {
       return sm.context.added_items = _.without(sm.context.added_items, text);
     }
-  };
-  sm.dom = {
-    input: null,
-    added_items: null,
-    suggestion_box: null,
-    initialize: function() {
-      sm.dom.input = $('#demo-input');
-      sm.dom.added_items = $('#added-items');
-      return sm.dom.suggestion_box = $('#suggestion-box');
-    },
-    manipulation: {
-      add_item: function(text, id) {
-        var item;
-        item = $(sm.templates.item).prepend(text);
-        return item.find('a').click(function() {
-          sm.actions.remove_item(text);
-          return item.remove();
-        });
-      },
-      show_suggestion_box: function(suggestion_list) {
-        var items;
-        items = _.map(suggestion_list, function(sug) {
-          return $(sm.templates.sug_item).text(sug);
-        });
-        return sm.dom.suggestion_box.append(items).slideDown();
-      },
-      highlight_suggestion: function(position) {},
-      close_suggestion_box: function() {
-        return sm.dom.suggestion_box.slideUp();
-      }
-    }
-  };
-  sm.templates = {
-    item: '<li class="item"><a href="#">x</a></li>',
-    sug_box: '<div class="suggestion-box"><ul></ul></div>',
-    sug_item: '<li class="sug-item"></li>'
   };
   sm.bindings = function() {
     return sm.dom.input.keyup(function(e) {
@@ -159,9 +133,62 @@
       }
     });
   };
+  sm.dom = {
+    input: null,
+    added_items: null,
+    suggestion_box: null,
+    initialize: function() {
+      sm.dom.input = $('#demo-input');
+      sm.dom.added_items = $('#added-items');
+      return sm.dom.suggestion_box = $('#suggestion-box');
+    },
+    manipulation: {
+      add_item: function(text) {
+        var item;
+        item = $(sm.templates.item).prepend(text);
+        item.find('a').click(function() {
+          sm.actions.remove_item(text);
+          return item.remove();
+        });
+        return sm.dom.added_items.append(item);
+      },
+      remove_last_item: function() {
+        return sm.dom.added_items.find('li:last-child').remove();
+      },
+      show_suggestion_box: function(suggestion_list) {
+        var items;
+        items = _.map(suggestion_list, function(sug) {
+          return $(sm.templates.sug_item).text(sug).click(function() {
+            return sm.send('add', sug);
+          }).css('cursor', 'pointer');
+        });
+        sm.dom.suggestion_box.html('');
+        _.each(items, function(i) {
+          return sm.dom.suggestion_box.append(i);
+        });
+        return sm.dom.suggestion_box.slideDown();
+      },
+      hide_suggestion_box: function() {
+        return sm.dom.suggestion_box.slideUp();
+      },
+      highlight_suggestion: function(position) {
+        sm.dom.suggestion_box.find("li").css('color', 'black');
+        return sm.dom.suggestion_box.find("li:nth-child(" + position + ")").css('color', 'red');
+      },
+      close_suggestion_box: function() {
+        return sm.dom.suggestion_box.slideUp();
+      }
+    }
+  };
+  sm.templates = {
+    item: '<li class="item"><a href="#">x</a></li>',
+    sug_box: '<div class="suggestion-box"><ul></ul></div>',
+    sug_item: '<li class="sug-item"></li>'
+  };
   $(function() {
     sm.dom.initialize();
     sm.bindings();
+    sm.context.suggestion_list = ["hola", "hello", "ahoy!", "bonjorno", "halo", "buenas", "akandemorl", "jarl"];
     return sm.start('empty');
   });
 }).call(this);

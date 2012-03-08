@@ -18,9 +18,11 @@
 #                  │ sug │     │ down │
 #                  └─────┘     └──────┘
 
+# Locals
 widget_state = {current_input: "", suggestion_list: [], selected_suggestion: 0, added_items: [] }
 
-sm = new W.SimpleStateMachine
+# StateMachine graph description
+window.sm = new W.SimpleStateMachine
   delete:     [ 'empty' ],
   empty:      [ 'writing', 'delete' ],
   writing:    [ 'writing', 'empty', 'suggest', 'navigation', 'add' ],
@@ -31,6 +33,7 @@ sm = new W.SimpleStateMachine
   down:       [ 'navigation' ],
   select:     [ 'add' ],
 
+# StateMachine input (events) transitions
 sm.transitions
   empty:      {delete: 'delete', new_input: 'writing'}
   writing:    {reset: 'empty', new_input: 'writing', delete: 'writing', godown: 'navigation', add: 'add'}
@@ -38,69 +41,90 @@ sm.transitions
 
 sm.set_context(widget_state)
 
+# State Actions
 sm.states =
   delete: ->
     # remove the last tag
     d = this.added_items.pop()
-    console.log "Deleting #{d}..."
+    sm.dom.manipulation.remove_last_item()
     this.sm.go.empty()
 
-  empty: ->
+  empty: (e) ->
     # just wait for input
     sm.dom.input.val('')
+    sm.dom.manipulation.hide_suggestion_box()
     this.current_input = ''
-    console.log 'empty I am!'
 
   writing: (e, text) ->
     # just wait for triggers
     if text == "" then return this.sm.go.empty()
-    console.log "writing: #{text}"
-    this.current_input = text
+    if text? && this.current_input != text
+      this.current_input = text
+      matching_suggestions = _.filter(this.suggestion_list, (s) -> s.match(text))
+      this.sm.go.suggest(matching_suggestions)
 
-  suggest: ->
+  suggest: (suggestions) ->
     # show/hide the courtain
-    console.log "suggesting on: #{text}"
+    if suggestions.length > 0
+      this.active_suggestions = suggestions
+      sm.dom.manipulation.show_suggestion_box(suggestions)
+    else
+      sm.dom.manipulation.hide_suggestion_box()
+      this.active_suggestions = []
     this.sm.go.writing()
 
-  add: ->
+  add: (item) ->
     # add one tag to the store
-    if (item = this.current_input) && item != ""
+    if (item ||= this.current_input) && item != ""
       this.added_items.push item
-      console.log "NEW ITEM [#{this.current_input}]"
-      console.log "  - item list: #{this.added_items}"
+      sm.dom.manipulation.add_item(item)
     this.sm.go.empty()
 
   navigation: ->
     # enter in nav-mode
+    if this.active_suggestions.length == 0 then this.sm.go.writing()
     if this.selected_suggestion < 0
-      console.log 'Quit navigation'
       this.selected_suggestion = 0
+      sm.dom.manipulation.hide_suggestion_box()
       this.sm.send('exit')
-    console.log "Enterin navigation state"
-    console.log "  - current selection: #{this.selected_suggestion}"
+    sm.dom.manipulation.highlight_suggestion(this.selected_suggestion+1)
 
   up: ->
     # move one position up in the list (nav-mode)
-    console.log "Going up in navigation!"
     this.selected_suggestion -= 1
     this.sm.go.navigation()
 
   down: ->
     # move one position down in the list (nav-mode)
-    console.log "Going down in navigation!"
     this.selected_suggestion += 1
     this.sm.go.navigation()
 
-  select: ->
+  select: (item) ->
     # item selected in nav-mode
-    console.log "item selected: #{this.selected_suggestion}"
-    this.current_input = this.suggestion_list[this.selected_suggestion]
-    this.sm.go.add()
+    console.log "select: #{item}"
+    item ||= this.active_suggestions[this.selected_suggestion]
+    this.sm.go.add(item)
 
+# General Actions
 sm.actions =
   remove_item: (text) ->
     sm.context.added_items = _.without(sm.context.added_items, text)
 
+# DOM events -> SM events
+sm.bindings = ->
+  sm.dom.input.keyup (e) ->
+    value = sm.dom.input.val()
+    switch e.keyCode
+      when 40 then sm.send('godown')
+      when 38 then sm.send('goup')
+      when 32,188 then sm.send('add')
+      when 13 then sm.send('select')
+      # Need to preventDefault in some cases
+      when 8 then sm.send('delete', e, value)
+      when 27 then sm.send('exit')
+      else sm.send('new_input', e, value)
+
+# DOM boilerplate
 sm.dom =
   input: null,
   added_items: null,
@@ -112,13 +136,26 @@ sm.dom =
     sm.dom.suggestion_box = $('#suggestion-box')
 
   manipulation:
-    add_item: (text, id) ->
+    add_item: (text) ->
       item = $(sm.templates.item).prepend(text)
       item.find('a').click -> sm.actions.remove_item(text); item.remove()
+      sm.dom.added_items.append(item)
+    remove_last_item: ->
+      sm.dom.added_items.find('li:last-child').remove()
     show_suggestion_box: (suggestion_list) ->
-      items = _.map suggestion_list, (sug) -> $(sm.templates.sug_item).text(sug)
-      sm.dom.suggestion_box.append(items).slideDown()
+      items = _.map suggestion_list, (sug) ->
+        $(sm.templates.sug_item)
+          .text(sug)
+          .click(-> sm.send('add', sug))
+          .css('cursor', 'pointer')
+      sm.dom.suggestion_box.html('')
+      _.each items, (i) -> sm.dom.suggestion_box.append(i)
+      sm.dom.suggestion_box.slideDown()
+    hide_suggestion_box: ->
+      sm.dom.suggestion_box.slideUp()
     highlight_suggestion: (position) ->
+      sm.dom.suggestion_box.find("li").css('color', 'black')
+      sm.dom.suggestion_box.find("li:nth-child(#{position})").css('color', 'red')
     close_suggestion_box: ->
       sm.dom.suggestion_box.slideUp()
 
@@ -127,21 +164,9 @@ sm.templates =
   sug_box:  '<div class="suggestion-box"><ul></ul></div>'
   sug_item: '<li class="sug-item"></li>'
 
-sm.bindings = ->
-  sm.dom.input.keyup (e) ->
-    value = sm.dom.input.val()
-    switch e.keyCode
-      when 40 then sm.send('godown')
-      when 38 then sm.send('goup')
-      when 32,188
-        sm.send('add')
-      when 13 then sm.send('select')
-      # Need to preventDefault in some cases
-      when 8 then sm.send('delete', e, value)
-      when 27 then sm.send('exit')
-      else sm.send('new_input', e, value)
-
+# Initalization
 $ ->
   sm.dom.initialize()
   sm.bindings()
+  sm.context.suggestion_list = ["hola", "hello", "ahoy!", "bonjorno", "halo", "buenas", "akandemorl", "jarl"]
   sm.start('empty')

@@ -19,7 +19,7 @@ class SimpleStateMachine
     @context = ctx
     @context.sm = {go: @go, send: _.bind(@send, @)}
 
-  do_transition: (dest, args) ->
+  do_transition: (dest, args...) ->
     if dest in @allowed[@current_state]
       console.log "#{@current_state} -> #{dest}"
       @leave_state.call(@, @current_state, args)
@@ -49,7 +49,7 @@ class SimpleStateMachine
   send: (event, args...) ->
     return unless allowed_events = @transition_map[@current_state]
     if next = allowed_events[event]
-      @do_transition next, args
+      @do_transition.apply(@, [next].concat(args))
 
 # Exports
 

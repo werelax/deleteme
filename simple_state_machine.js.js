@@ -1,11 +1,11 @@
 (function() {
   var SimpleStateMachine, exports;
-  var __indexOf = Array.prototype.indexOf || function(item) {
+  var __slice = Array.prototype.slice, __indexOf = Array.prototype.indexOf || function(item) {
     for (var i = 0, l = this.length; i < l; i++) {
       if (this[i] === item) return i;
     }
     return -1;
-  }, __slice = Array.prototype.slice;
+  };
   SimpleStateMachine = (function() {
     function SimpleStateMachine(state_connections) {
       var all_states, k, sm, _i, _len;
@@ -31,7 +31,9 @@
         send: _.bind(this.send, this)
       };
     };
-    SimpleStateMachine.prototype.do_transition = function(dest, args) {
+    SimpleStateMachine.prototype.do_transition = function() {
+      var args, dest;
+      dest = arguments[0], args = 2 <= arguments.length ? __slice.call(arguments, 1) : [];
       if (__indexOf.call(this.allowed[this.current_state], dest) >= 0) {
         console.log("" + this.current_state + " -> " + dest);
         this.leave_state.call(this, this.current_state, args);
@@ -76,7 +78,7 @@
         return;
       }
       if (next = allowed_events[event]) {
-        return this.do_transition(next, args);
+        return this.do_transition.apply(this, [next].concat(args));
       }
     };
     return SimpleStateMachine;
