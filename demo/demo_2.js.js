@@ -86,6 +86,19 @@
       this.dom = this.initialize_dom();
       this.bind_events(this.dom);
     }
+    TagSuggestion.prototype.go_next = function() {
+      this.selected_index = Math.min(this.options_list.length - 1, this.selected_index + 1);
+      return this.highlight_element();
+    };
+    TagSuggestion.prototype.go_prev = function() {
+      this.selected_index = Math.max(0, this.selected_index - 1);
+      return this.highlight_element();
+    };
+    TagSuggestion.prototype.select = function(selected) {
+      selected || (selected = this.options_list[this.selected_index]);
+      this.channel.publish('suggest:selected', selected);
+      return this.close();
+    };
     TagSuggestion.prototype.initialize_dom = function() {
       return {
         suggestion_box: $('#demo2-suggestion-box')
@@ -130,23 +143,10 @@
     TagSuggestion.prototype.close = function() {
       return this.dom.suggestion_box.hide();
     };
-    TagSuggestion.prototype.go_next = function() {
-      this.selected_index = Math.min(this.options_list.length - 1, this.selected_index + 1);
-      return this.highlight_element();
-    };
-    TagSuggestion.prototype.go_prev = function() {
-      this.selected_index = Math.max(0, this.selected_index - 1);
-      return this.highlight_element();
-    };
     TagSuggestion.prototype.highlight_element = function(n) {
       n || (n = this.selected_index);
       this.dom.suggestion_box.find('li').css('color', '');
       return this.dom.suggestion_box.find("li:nth-child(" + (n + 1) + ")").css('color', 'red');
-    };
-    TagSuggestion.prototype.select = function(selected) {
-      selected || (selected = this.options_list[this.selected_index]);
-      this.channel.publish('suggest:selected', selected);
-      return this.close_box();
     };
     return TagSuggestion;
   })();

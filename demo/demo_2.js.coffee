@@ -81,6 +81,24 @@ class TagSuggestion
     @dom = @initialize_dom()
     @bind_events(@dom)
 
+  # Operations
+
+  go_next: ->
+    @selected_index = Math.min(@options_list.length - 1, @selected_index + 1)
+    @highlight_element()
+
+  go_prev: ->
+    @selected_index = Math.max(0, @selected_index - 1)
+    @highlight_element()
+
+  select: (selected) ->
+    # select currently highlighted suggestion
+    selected ||= @options_list[@selected_index]
+    @channel.publish('suggest:selected', selected)
+    @close()
+
+  # DOM
+
   initialize_dom: ->
     suggestion_box: $('#demo2-suggestion-box')
 
@@ -111,24 +129,10 @@ class TagSuggestion
   close: ->
     @dom.suggestion_box.hide()
 
-  go_next: ->
-    @selected_index = Math.min(@options_list.length - 1, @selected_index + 1)
-    @highlight_element()
-
-  go_prev: ->
-    @selected_index = Math.max(0, @selected_index - 1)
-    @highlight_element()
-
   highlight_element: (n) ->
     n ||= @selected_index
     @dom.suggestion_box.find('li').css('color', '')
     @dom.suggestion_box.find("li:nth-child(#{n+1})").css('color', 'red')
-
-  select: (selected) ->
-    # select currently highlighted suggestion
-    selected ||= @options_list[@selected_index]
-    @channel.publish('suggest:selected', selected)
-    @close_box()
 
 # Input Dispatcher
 
