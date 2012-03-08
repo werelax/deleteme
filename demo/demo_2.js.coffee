@@ -19,6 +19,8 @@ class Channel
 
 class TagAcumulator
   constructor: (ch) ->
+    # FACTORIZE: selector, hooks?
+    # REVIEW: (*) classes, (*) don't allow duplication
     @channel = ch
     # input
     @channel.subscribe 'accumulator:store', @store, @
@@ -33,7 +35,7 @@ class TagAcumulator
 
   store: (tag) ->
     @stored_tags.push tag
-    @dom.tag_list.append @render(tag)
+    @dom.tag_list.find('li:last').before @render(tag)
 
   delete_last: ->
     deleted = @stored_tags.pop()
@@ -45,7 +47,7 @@ class TagAcumulator
   # DOM
 
   initialize_dom: ->
-    tag_list: $('#demo2-tag-list')
+    tag_list: $('.e-tgwd-list-store')
 
   bind_events: (dom) ->
     self = @
@@ -55,16 +57,14 @@ class TagAcumulator
       tag_element.remove()
 
   render: (tag) ->
-    $('<li/>')
-      .addClass('e-tag')
-      .attr('data-tag', tag)
-      .text(tag)
-      .append('<a href="#">x</a>')
+    $('<li/>').addClass('e-tag').attr('data-tag', tag).text(tag).append('<a href="#">x</a>')
 
 # Show and manage the suggestion box
 
 class TagSuggestion
   constructor: (ch) ->
+    # FACTORIZE: selector, available options (as a method?), delay and throttle of the suggestion, rendering, hooks?
+    # REVIEW: classes
     @channel = ch
     # input
     @channel.subscribe 'suggest:show',   @show,    @
@@ -106,7 +106,7 @@ class TagSuggestion
     self = @
     dom.suggestion_box.delegate 'li.e-suggestion', 'click', ->
       suggestion = $(this).attr('data-suggestion')
-      self.select_suggestion(suggestion)
+      self.select(suggestion)
 
   show: (input) ->
     # Don't do anything if the input is the same
@@ -137,6 +137,7 @@ class TagSuggestion
 # Input Dispatcher
 
 class TagInput
+  # FACTORIZE: Selectors
   constructor: (ch) ->
     @channel = ch
     #input
@@ -146,7 +147,7 @@ class TagInput
     @bind_events(@dom)
 
   initialize_dom: ->
-      input: $('#demo2-input')
+      input: $('.e-tgwd-input')
 
   bind_events: (dom) ->
     # Dispatch events based on keypresses
@@ -161,10 +162,17 @@ class TagInput
         when 8      then self.channel.publish('accumulator:delete-last') if value.length == 0
       self.channel.publish('suggest:show', value)
 
+    dom.input.blur ->
+      value = self.dom.input.val()
+      self.channel.publish('input:tag', value)
+
 # Parent Widget
 
 class TagWidget
-  constructor: ->
+  # 1) SET THE PARAMETERS
+  # 2) DO THE DOM MANIPULATION AROUND THE INPUT
+  constructor: (input: input)->
+    @wrap_input(input)
     # the decoupled components
     @channel     = new Channel()
     @input       = new TagInput(@channel)
@@ -184,4 +192,25 @@ class TagWidget
   selected_suggestion: (suggestion) ->
     @read_input(suggestion)
 
-$ -> window.tag_input = new TagWidget()
+  get_tags: ->
+
+  # DOM
+
+  wrap_input: (selector) ->
+    input =    $(selector).addClass('e-tgwd-input')
+    store =    $('<ul/>').addClass ('e-tgwd-list-store')
+    input_li = $('<li/>').addClass ('e-tgwd-input-li')
+    input.wrap(store).wrap(input_li)
+
+
+
+### HIPOTHETIC USE CASE
+###
+
+$ ->
+  sugs = ['a']
+  tw = new TagWidget input: '#demo2-input', options: (-> sugs), throttle: 0
+  # OR maybe better as a jQuery plugin?
+  # $('#input-selector').tabWidget({options: (-> sugs), throttle: 0})
+
+  $('.e-demo2-button').click -> console.log(tw.get_tags())

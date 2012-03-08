@@ -41,7 +41,7 @@
     }
     TagAcumulator.prototype.store = function(tag) {
       this.stored_tags.push(tag);
-      return this.dom.tag_list.append(this.render(tag));
+      return this.dom.tag_list.find('li:last').before(this.render(tag));
     };
     TagAcumulator.prototype.delete_last = function() {
       var deleted;
@@ -53,7 +53,7 @@
     };
     TagAcumulator.prototype.initialize_dom = function() {
       return {
-        tag_list: $('#demo2-tag-list')
+        tag_list: $('.e-tgwd-list-store')
       };
     };
     TagAcumulator.prototype.bind_events = function(dom) {
@@ -110,7 +110,7 @@
       return dom.suggestion_box.delegate('li.e-suggestion', 'click', function() {
         var suggestion;
         suggestion = $(this).attr('data-suggestion');
-        return self.select_suggestion(suggestion);
+        return self.select(suggestion);
       });
     };
     TagSuggestion.prototype.show = function(input) {
@@ -161,13 +161,13 @@
     }
     TagInput.prototype.initialize_dom = function() {
       return {
-        input: $('#demo2-input')
+        input: $('.e-tgwd-input')
       };
     };
     TagInput.prototype.bind_events = function(dom) {
       var self;
       self = this;
-      return dom.input.keyup(function(e) {
+      dom.input.keyup(function(e) {
         var value;
         value = self.dom.input.val();
         switch (e.keyCode) {
@@ -191,11 +191,19 @@
         }
         return self.channel.publish('suggest:show', value);
       });
+      return dom.input.blur(function() {
+        var value;
+        value = self.dom.input.val();
+        return self.channel.publish('input:tag', value);
+      });
     };
     return TagInput;
   })();
   TagWidget = (function() {
-    function TagWidget() {
+    function TagWidget(_arg) {
+      var input;
+      input = _arg.input;
+      this.wrap_input(input);
       this.channel = new Channel();
       this.input = new TagInput(this.channel);
       this.accumulator = new TagAcumulator(this.channel);
@@ -215,9 +223,30 @@
     TagWidget.prototype.selected_suggestion = function(suggestion) {
       return this.read_input(suggestion);
     };
+    TagWidget.prototype.get_tags = function() {};
+    TagWidget.prototype.wrap_input = function(selector) {
+      var input, input_li, store;
+      input = $(selector).addClass('e-tgwd-input');
+      store = $('<ul/>').addClass('e-tgwd-list-store');
+      input_li = $('<li/>').addClass('e-tgwd-input-li');
+      return input.wrap(store).wrap(input_li);
+    };
     return TagWidget;
   })();
+  /* HIPOTHETIC USE CASE
+  */
   $(function() {
-    return window.tag_input = new TagWidget();
+    var sugs, tw;
+    sugs = ['a'];
+    tw = new TagWidget({
+      input: '#demo2-input',
+      options: (function() {
+        return sugs;
+      }),
+      throttle: 0
+    });
+    return $('.e-demo2-button').click(function() {
+      return console.log(tw.get_tags());
+    });
   });
 }).call(this);
