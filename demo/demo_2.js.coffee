@@ -125,10 +125,10 @@ class TagSuggestion
       if options_list.length > 0
         self.dom.suggestion_box.html('')
         _.each options_list, (s) -> self.dom.suggestion_box.append(self.render(s))
-        self.dom.suggestion_box.slideDown()
+        self.dom.suggestion_box.slideDown('fast')
         self.selected_index = -1
       else
-        self.dom.suggestion_box.slideUp()
+        self.dom.suggestion_box.slideUp('fast')
 
   render: (s) ->
     $('<li/>').addClass('e-suggestion').attr('data-suggestion', s).text(s)
@@ -218,11 +218,13 @@ class TagWidget
     # Nasty...
     input        = $(selector).addClass('e-tgwd-input')
     surround_box = $('<div/>').addClass('e-tgwd-box')
-    store        = $('<ul/>').addClass ('e-tgwd-list-store')
-    input_li     = $('<li/>').addClass ('e-tgwd-input-li')
-    suggest_box  = $('<ul/>').addClass ('e-tgwd-suggest-box')
+    store        = $('<ul/>' ).addClass('e-tgwd-list-store')
+    input_li     = $('<li/>' ).addClass('e-tgwd-input-li')
+    suggest_box  = $('<ul/>' ).addClass('e-tgwd-suggest-box')
     input.wrap(surround_box).wrap(store).wrap(input_li)
-    $('.e-tgwd-box').append(suggest_box)
+    $('.e-tgwd-box')
+      .append(suggest_box)
+      .click -> input.focus()
 
 
 ### HIPOTHETIC USE CASE

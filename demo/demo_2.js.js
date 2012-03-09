@@ -159,10 +159,10 @@
           _.each(options_list, function(s) {
             return self.dom.suggestion_box.append(self.render(s));
           });
-          self.dom.suggestion_box.slideDown();
+          self.dom.suggestion_box.slideDown('fast');
           return self.selected_index = -1;
         } else {
-          return self.dom.suggestion_box.slideUp();
+          return self.dom.suggestion_box.slideUp('fast');
         }
       });
     };
@@ -276,7 +276,9 @@
       input_li = $('<li/>').addClass('e-tgwd-input-li');
       suggest_box = $('<ul/>').addClass('e-tgwd-suggest-box');
       input.wrap(surround_box).wrap(store).wrap(input_li);
-      return $('.e-tgwd-box').append(suggest_box);
+      return $('.e-tgwd-box').append(suggest_box).click(function() {
+        return input.focus();
+      });
     };
     return TagWidget;
   })();
